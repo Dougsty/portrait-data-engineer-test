@@ -1,196 +1,535 @@
-# Data Engineer Challenge: Healthcare Analytics Pipeline
+# Test Documentation
+
+## Environment Tools
+- Claude for this documentation and layout
+- Copilot for autocomplete and docstring generation and better error handling: Prompt(Better error handling, for this function)
+- Ruff formatter for Python code standardization
+- Jupyter Notebook for interactive data analysis
+- Pandas for data manipulation (chosen due to small dataset size; for larger datasets, Spark would be preferred)
+
+## Disclaimer
+I organized the repository to emulate my normal approach to projects. The implementation demonstrates my working methodology within the scope of this assessment, focusing on maintainability and scalability principles.
+
+## Repository Structure
+I created a src folder for the main project code, a .env file for environment variables, a utils folder for modular functions, and a notebook folder for data exploration. The pipeline structure contains 3 Python files handling all data due to the small size. For larger datasets, I would segregate by data type (e.g., Pipeline/Prescription with raw, refined, and trusted folders).
+
+## Development Process
+1. **Data Exploration**: Initial transformation and exploration using Jupyter notebooks
+2. **Architecture Design**: Implementation of a medallion architecture
+3. **Data Flow**:
+   - **Bronze/Raw Layer**: CSV data from the transient zone with no transformation loaded as raw data
+   - **Silver/Trusted Layer**: Data transformed with proper data typing
+   - **Gold/Refined Layer**: Aggregations and transformations for analysis
+
+I emulated the PostgreSQL schema as a container from a data lake (due to time constraints and test scope). The complete flow is: CSV → Bronze/Raw → Silver/Trusted (with data typing) → Gold/Refined (aggregated for analysis).
+
+### Proper Project
+### Estructure
+
+      project_root/
+      ├── src/                # Source code directory containing all functions
+      │   ├── pipeline/       # Data transformation logic
+      │   └── utils/          # Helper functions and utilities
+      ├── notebooks/          # Jupyter notebooks for exploration and analysis
+      ├── sample_datasets/    # Sample data directory
+      └── .env                # Environment variables (not committed to repository)
+
+### Functions Created
+   Connection with postgresdatabase: 
+   ```python
+      def postgres_connection(
+         user: str = os.getenv("POSTGRES_USER"),
+         password: str = os.getenv("POSTGRES_PASSWORD"),
+         host: str = "localhost",
+         port: str = "5432",
+         database: str = "healthcare",
+      ) -> create_engine:
+         """
+         Create a connection to the PostgreSQL database.
+         Args:
+            user (str): PostgreSQL username.
+            password (str): PostgreSQL password.
+            host (str): PostgreSQL host.
+            port (str): PostgreSQL port.
+            database (str): PostgreSQL database name.
+         Returns:
+            engine (create_engine): SQLAlchemy engine object.
+         Raises:
+            ValueError: If any required parameter is missing.
+            Exception: If the connection to the database fails.
+         """
+
+         # Validate required parameters
+         if not user or not password:
+            raise ValueError("Database user and password must be provided.")
+
+         try:
+            # Create a connection string
+            engine = create_engine(f"postgresql://{user}:{password}@{host}:{port}/{database}")
+            
+            return engine
+         except Exception as e:
+            raise Exception(f"Failed to connect to the PostgreSQL database: {e}")
+   ```
+   Data loading with a possibility of full or incremental ingestion
+   ```python
+   def load_data(df: pd.DataFrame, table_name: str, schema: str) -> None:
+    """
+    Send data to PostgreSQL database.
+
+    Args:
+        df (pd.DataFrame): DataFrame to be sent.
+        table_name (str): Name of the table in the database.
+        schema (str): Schema where the table will be created.
+    """
+    try:
+        # Convert DataFrame to SQL and send it to PostgreSQL
+        engine = postgres_connection()
+
+        # Create schema if it doesn't exist
+        with engine.connect() as connection:
+            try:
+                connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
+                connection.commit()
+            except Exception as e:
+                raise RuntimeError(f"Error creating schema '{schema}': {e}")
+
+        # Check for incremental or full load
+        inspector = inspect(engine)
+        if inspector.has_table(table_name, schema=schema):
+            first_run = "append"
+        else:
+            first_run = "replace"
+
+        df["date_insertion"] = pd.to_datetime("now")
+        # Send DataFrame to the specified schema and table
+        try:
+            df.to_sql(table_name, con=engine, schema=schema, if_exists=first_run, index=False)
+        except Exception as e:
+            raise RuntimeError(f"Error loading data into table '{schema}.{table_name}': {e}")
+
+        print(
+            f"=== Data sent to {schema}.{table_name} with {first_run} operation successfully!"
+        )
+    except Exception as e:
+        print(f"An error occurred: {e}")
+   ```
+# Pipeline Documentation
+# ETL Pipeline Documentation
+
+This pipeline processes healthcare data through three stages — **Raw**, **Trusted**, and **Refined** — before orchestrating them with a main ETL script.
 
 ## Overview
 
-In this challenge, you will be asked to build a data pipeline that processes and transforms a sample dataset extracted from our EHR system. Your task is to design an ETL pipeline, clean and transform the data, and answer key business questions that would help healthcare professionals make better data-driven decisions.
+The pipeline consists of four main components:
 
-## Setup
+1. **`raw.py`** – Loads raw CSV data into PostgreSQL (raw layer)  
+2. **`trusted.py`** – Transforms raw data into validated, consistent format (trusted layer)  
+3. **`refined.py`** – Applies business logic and analytics-ready features (refined layer)  
+4. **`elt.py`** – Orchestrates the full ETL process  
 
-We've provided a Docker Compose setup with PostgreSQL to help you get started quickly. To use it:
+---
 
-1. Make sure you have Docker and Docker Compose installed
-2. Run `docker-compose up -d` to start the PostgreSQL database
-3. The database will be available at:
-   - Host: localhost
-   - Port: 5432
-   - Database: healthcare
-   - Username: postgres
-   - Password: postgres
+## 1. Raw Layer (`raw.py`)
 
-To help you get started quickly, we've provided some helper files:
+### Purpose
+Loads all CSV files from the `sample_datasets` directory into PostgreSQL tables under the **`raw`** schema.
 
-1. `load_data.py`: A Python script to load the CSV files into PostgreSQL
-   - Install dependencies: `pip install -r requirements.txt`
-   - Run: `python load_data.py`
-
-2. `sample_queries.sql`: Contains some basic SQL queries to help you explore the data
-   - You can run these queries in your preferred SQL client
-   - Feel free to modify and extend these queries for your analysis
-
-If you prefer to use a different database solution, you're free to do so, but please provide clear instructions on how to set it up.
-
-## Technical Requirements
-
-We recommend using the following technologies:
-
-- **Programming Language**: Python 3.8 or higher
-- **Database**: SQL (PostgreSQL preferred)
-- **Data Processing**: You can use any Python libraries you're comfortable with (e.g., pandas, SQLAlchemy)
-- **Version Control**: Git
-
-While these are our preferred technologies, you're free to use other tools if you believe they better solve the problem. However, please be prepared to explain your technology choices in your submission.
-
-## Success Criteria
-
-A successful submission will include:
-
-1. **Documentation (README or PDF)**:
-   - Clear explanation of your approach and design decisions
-   - Step-by-step instructions to run your solution
-   - Description of any assumptions made
-   - Discussion of trade-offs and alternative approaches considered
-
-2. **Data Pipeline Implementation**:
-   - Working ETL pipeline that ingests and transforms the data
-   - Clean, well-documented code
-   - Proper error handling and data validation
-   - Efficient data processing approach
-
-3. **Analysis and Results**:
-   - SQL queries used to answer the business questions
-   - Results of the analysis in a clear, readable format
-   - Visualizations or tables showing key metrics
-   - Brief interpretation of the results and their business implications
-
-4. **Code Quality**:
-   - Well-structured, maintainable code
-   - Clear documentation and comments
-   - Proper error handling
-   - Efficient data processing
-
-### Example Output Format
-
-Your documentation should include sections similar to this example:
-
-```sql
--- Query: Average age of patients per appointment type
-SELECT 
-    a.appointment_type,
-    AVG(p.age) as average_age
-FROM appointments a
-JOIN patients p ON a.patient_id = p.patient_id
-GROUP BY a.appointment_type;
-
--- Results:
--- appointment_type | average_age
--- -----------------+-------------
--- Checkup         | 45.2
--- Emergency       | 38.7
--- ...
-
--- Analysis:
--- The data shows that patients scheduling checkups tend to be older...
+### Key Function
+```python
+def load_all_raw_data():
+    """Load all CSV files into PostgreSQL tables."""
+    schema = "raw"
+    for dataset in os.listdir(dataset_path):
+        if dataset.endswith(".csv"):
+            try:
+                print(f"=== Loading {dataset}...")
+                table_name = dataset.split(".")[0]
+                data = pd.read_csv(os.path.join(dataset_path, dataset))
+                load_data(df=data, table_name=table_name, schema=schema)
+                print(f"--- Successfully loaded {table_name=} into {schema=}")
+            except FileNotFoundError as e:
+                print(f"Error: File not found - {e}")
+            except pd.errors.EmptyDataError as e:
+                print(f"Error: Empty data in file {dataset} - {e}")
+            except Exception as e:
+                print(f"Unexpected error while loading {dataset}: {e}")
 ```
 
-## Dataset
+### Features
+- Auto-detects all `.csv` files in the dataset directory
+- Uses file names (without extension) as PostgreSQL table names
+- Comprehensive error handling for:
+  - Missing files
+  - Empty datasets
+  - Unexpected failures
 
-The sample dataset contains the following tables:
+---
 
-1. **Patients**: Contains information about patients.
-   - `patient_id` (integer)
-   - `name` (string)
-   - `age` (integer) - Note: Some demographic information may need careful handling
-   - `gender` (string)
-   - `registration_date` (date) - Important for understanding patient history
+## 2. Trusted Layer (`trusted.py`)
 
-2. **Appointments**: Contains records of patient appointments.
-   - `appointment_id` (integer)
-   - `patient_id` (integer)
-   - `appointment_date` (date) - Consider the relationship with patient registration dates
-   - `appointment_type` (string: e.g., "Checkup", "Emergency", etc.)
-   - `provider_id` (integer)
+### Purpose
+Transforms raw data into a validated format stored in the **`trusted`** schema.
 
-3. **Providers**: Information about healthcare providers.
-   - `provider_id` (integer)
-   - `name` (string)
-   - `specialty` (string)
+### Key Functions
+```python
+def transform_appointment(df: pd.DataFrame) -> pd.DataFrame:
+    # Converts appointment_date to datetime
 
-4. **Prescriptions**: Medication prescribed to patients.
-   - `prescription_id` (integer)
-   - `patient_id` (integer)
-   - `medication_name` (string)
-   - `prescription_date` (date) - Pay attention to prescription patterns
+def transform_patients(df: pd.DataFrame) -> pd.DataFrame:
+    # Converts registration_date to datetime and age to integer
 
-The CSV files are located in the `sample_datasets` directory. As with any real-world healthcare data, you may encounter some interesting patterns that require careful consideration during your analysis.
+def transform_prescriptions(df: pd.DataFrame) -> pd.DataFrame:
+    # Converts prescription_date to datetime
+```
 
-## Task
+### Features
+- Standardizes and cleans raw data
+- Validates and converts date fields
+- Converts data types (e.g., integers, datetime)
+- Applies table-specific transformation logic
+- Maintains data integrity with error handling
 
-### Part 1: Data Pipeline
+---
 
-1. **Data Ingestion**:
-   - Ingest the provided dataset into a database of your choice (or the one we provided on the docker-compose).
-   - If you choose a different solution, please provide clear setup instructions.
+## 3. Refined Layer (`refined.py`)
 
-2. **Data Transformation**:
-   Create the following derived fields to enable better analysis:
-   
-   a) Patient-level transformations:
-   - Age group (0-18, 19-30, 31-50, 51-70, 71+)
-   - Patient type (New: registered < 6 months, Regular: 6-24 months, Long-term: > 24 months)
-   
-   b) Appointment-level transformations:
-   - Day of week (Monday-Sunday)
-   - Time since last appointment (in days)
-   
-   c) Prescription-level transformations:
-   - Medication category (e.g., Pain Relief, Diabetes, Heart, etc.)
-   - Prescription frequency (First-time, Repeat)
+### Purpose
+Applies business rules and computes derived analytical fields for the **`refined`** schema.
 
-3. **Data Analysis**:
-   Using the transformed data, answer the following questions:
-   
-   a) Patient Analysis:
-   - What is the distribution of patients across age groups?
-   - How does the appointment frequency vary by patient type?
-   
-   b) Appointment Analysis:
-   - What are the most common appointment types by age group?
-   - Are there specific days of the week with higher emergency visits?
-   
-   c) Prescription Analysis:
-   - What are the most prescribed medication categories by age group?
-   - How does prescription frequency correlate with appointment frequency?
+### Key Functions
+```python
+def refinement_appointment(df: pd.DataFrame) -> pd.DataFrame:
+    # Adds day_of_week and days_since_last_appointment
 
-### Part 2: Documentation
+def refinement_patients(df: pd.DataFrame) -> pd.DataFrame:
+    # Creates age groups and patient type categories
 
-Create a comprehensive report that includes:
+def refinement_prescriptions(df: pd.DataFrame) -> pd.DataFrame:
+    # Adds medication categories and prescription frequency types
+```
 
-1. **Data Pipeline Documentation**:
-   - Description of your data transformation approach
-   - SQL queries or code used for transformations
-   - Any data quality issues encountered and how you handled them
+### Analytical Features Created
 
-2. **Analysis Results**:
-   - SQL queries used for each analysis question
-   - Results presented in clear tables or visualizations
-   - Brief interpretation of each finding
+**Appointments**
+- `day_of_week`
+- `days_since_last_appointment`
 
-3. **Business Insights**:
-   - 2-3 key findings that could help improve healthcare operations
-   - Suggestions for further analysis
+**Patients**
+- Age groups (0–18, 19–30, etc.)
+- Months since registration
+- Patient type (New, Regular, Old)
 
-## Submission
+**Prescriptions**
+- Medication categories (e.g., Pain Relief, Diabetes)
+- Prescription frequency (First-time, Repeat)
+- Total frequency count per patient
 
-Please submit your code and documentation in a GitHub repository or any version-controlled platform. Make sure to include:
+---
 
-1. All necessary code files
-2. A README file explaining:
-   - How to run your pipeline
-   - Any assumptions you've made
-   - Any trade-offs you've considered during the development process
-   - Clear instructions for setting up and running your solution
+## 4. ETL Orchestration (`elt.py`)
 
-If you used a different database solution than the provided PostgreSQL setup, please ensure that all data files and scripts are included and can be easily run on any local environment.
+### Purpose
+Coordinates the execution of the entire pipeline.
 
-Alternatively, you may submit your solution as a zip folder via email if you prefer this method.
+### Key Function
+```python
+def main():
+    print("Loading raw data...")
+    load_all_raw_data()
 
+    print("Loading trusted data...")
+    transform_all_data()
+
+    print("Loading refined data...")
+    refine_all_data()
+```
+
+### Error Handling
+Robust error handling is implemented across the pipeline:
+- File not found
+- Empty data files
+- Missing or malformed columns
+- Type conversion issues
+- Database connection failures
+
+---
+
+## Data Flow
+
+```text
+CSV files 
+   ↓ (raw.py)
+Raw schema 
+   ↓ (trusted.py)
+Trusted schema 
+   ↓ (refined.py)
+Refined schema
+```
+
+---
+
+## Usage
+
+Run the entire ETL pipeline with:
+
+```bash
+python elt.py
+```
+
+
+# Data Analysis Documentation
+
+## Overview
+This section documents the analysis conducted on the healthcare dataset using SQL queries against the refined data layer. The analysis focuses on understanding patient demographics, appointment patterns, and prescription behaviors to derive actionable insights for healthcare operations.
+
+## Setup and Configuration
+The analysis leverages the PostgreSQL connection established in the earlier sections of the pipeline, utilizing the refined data layer that contains properly transformed and cleaned data.
+
+```python
+import sys
+sys.path.append('../../')
+from src.utils.connection import postgres_connection
+import pandas as pd
+```
+
+## Patient Analysis
+
+### Patient Age Distribution
+**Question**: What is the distribution of patients across age groups?
+
+**SQL Query**:
+```sql
+SELECT 
+    age_group, 
+    COUNT(*) as patient_distribution
+FROM 
+    healthcare.refined.patients
+GROUP BY 
+    age_group
+```
+**Results**: 
+| Age Group | Patient Distribution |
+|-----------|----------------------|
+| 0-18      | 1                    |
+| 19-30     | 8                    |
+| 31-50     | 14                   |
+| 51-70     | 12                   |
+| 71+       | 15                   |
+
+### Appointment Frequency by Patient Type
+**Question**: How does the appointment frequency vary by patient type?
+
+**SQL Query**:
+```sql
+SELECT 
+    p.patient_type,
+    COUNT(p.patient_id) as qtt_patients_by_type
+FROM 
+    refined.patients p
+LEFT JOIN 
+    refined.appointments a ON a.patient_id = p.patient_id
+GROUP BY 
+    p.patient_type
+```
+
+**Results**: Regulars are the most frequent patients, who are within the 24-month registration interval.
+| Patient Type | Patient Count |
+|-------------|---------------|
+| Old         | 49            |
+| Regular     | 57            |
+| New         | 6             |
+
+**Business Implication**: Regular patients represent an important demographic for the healthcare facility, indicating that retention strategies are working effectively. Further analysis could explore conversion rates from new to regular patients.
+
+## Appointment Analysis
+
+### Common Appointment Types by Age Group
+**Question**: What are the most common appointment types by age group?
+
+**SQL Query**:
+```sql
+SELECT 
+    a.appointment_type,
+    p.age_group,
+    COUNT(*) as qtt_patients_by_type
+FROM 
+    refined.patients p
+LEFT JOIN 
+    refined.appointments a ON a.patient_id = p.patient_id
+GROUP BY 
+    a.appointment_type, p.age_group 
+ORDER BY 
+    qtt_patients_by_type DESC
+```
+
+**Results**: Checkup is the most common one
+| Appointment Type | Age Group | Patient Count |
+|------------------|-----------|---------------|
+| Checkup          | 51-70     | 14            |
+| Checkup          | 71+       | 13            |
+| Consultation     | 31-50     | 10            |
+| Emergency        | 71+       | 9             |
+| Emergency        | 31-50     | 8             |
+| Emergency        | 19-30     | 8             |
+| Checkup          | 31-50     | 7             |
+| Emergency        | 51-70     | 7             |
+| Consultation     | 51-70     | 6             |
+| Consultation     | 19-30     | 6             |
+| Checkup          | 19-30     | 5             |
+| Consultation     | 71+       | 5             |
+
+**Business Implication**: The prevalence of checkups suggests an opportunity to enhance preventive care programs, potentially leading to better health outcomes and reduced emergency visits.
+
+### Emergency Visits by Day of Week
+**Question**: Are there specific days of the week with higher emergency visits?
+
+**SQL Query**:
+```sql
+SELECT 
+    a.appointment_type,
+    a.day_of_week,
+    p.age_group,
+    COUNT(*) as qtt_patients_by_type
+FROM 
+    refined.patients p
+LEFT JOIN 
+    refined.appointments a ON a.patient_id = p.patient_id
+WHERE 
+    appointment_type = 'Emergency'
+GROUP BY 
+    a.appointment_type, a.day_of_week, p.age_group
+ORDER BY 
+    qtt_patients_by_type DESC
+```
+
+**Results**: 
+Friday shows the highest number of emergency visits. This temporal pattern could be related to work-week stress, delayed care-seeking behavior, or staffing patterns.
+
+| Appointment Type | Day of Week | Age Group | Count |
+|------------------|-------------|-----------|-------|
+| Emergency        | Friday      | 31-50     | 4     |
+| Emergency        | Friday      | 19-30     | 2     |
+| Emergency        | Saturday    | 71+       | 2     |
+| Emergency        | Saturday    | 51-70     | 2     |
+| Emergency        | Monday      | 31-50     | 2     |
+| Emergency        | Friday      | 51-70     | 2     |
+| Emergency        | Thursday    | 19-30     | 2     |
+| Emergency        | Saturday    | 19-30     | 2     |
+| Emergency        | Tuesday     | 71+       | 2     |
+| Emergency        | Monday      | 19-30     | 2     |
+
+**Business Implication**: The facility should consider adjusting staffing levels for emergency services on Fridays to accommodate the higher demand. Further investigation into the causes of this pattern could help develop preventive interventions.
+
+## Prescription Analysis
+
+### Most Prescribed Medication Categories by Age Group
+**Question**: What are the most prescribed medication categories by age group?
+
+**SQL Query**:
+```sql
+SELECT 
+    p.medication_category,
+    p2.age_group,
+    COUNT(*) as qtd_prescription_by_age
+FROM 
+    refined.prescriptions p 
+LEFT JOIN 
+    refined.patients p2 ON p2.patient_id = p.patient_id
+GROUP BY 
+    p.medication_category, p2.age_group
+ORDER BY 
+    qtd_prescription_by_age DESC
+```
+
+**Results**: 
+Heart medications are most frequently prescribed for patients in the 31-50 age group.
+
+| Medication Category | Age Group | Prescription Count |
+|--------------------|-----------|-------------------|
+| Heart              | 31-50     | 16                |
+| Pain Relief        | 71+       | 15                |
+| Pain Relief        | 51-70     | 15                |
+| Heart              | 71+       | 13                |
+| Heart              | 51-70     | 10                |
+| Diabetes           | 71+       | 10                |
+| Pain Relief        | 31-50     | 10                |
+| Antibiotic         | 71+       | 7                 |
+| Pain Relief        | 19-30     | 5                 |
+| Antibiotic         | 51-70     | 5                 |
+
+**Business Implication**: This insight could inform targeted health education programs for cardiovascular health in middle-aged patients. It also suggests a need for preventive cardiology services.
+
+### Prescription and Appointment Frequency Correlation
+**Question**: How does prescription frequency correlate with appointment frequency?
+
+**SQL Query**:
+```sql
+WITH prescription_freq AS (
+    SELECT 
+        p.patient_id,
+        p.prescription_frequency
+    FROM 
+        refined.prescriptions p 
+    LEFT JOIN 
+        refined.patients p2 ON p2.patient_id = p.patient_id
+),
+appointment_freq AS (
+    SELECT 
+        patient_id,
+        COUNT(*) as appointment_frequency
+    FROM 
+        refined.prescriptions p 
+    GROUP BY 
+        patient_id
+)
+SELECT 
+    pf1.patient_id,
+    prescription_frequency,
+    appointment_frequency,
+    prescription_frequency = appointment_frequency as correlation
+FROM 
+    prescription_freq pf1
+LEFT JOIN 
+    appointment_freq pf2 ON pf2.patient_id = pf1.patient_id
+```
+
+      # Python analysis of correlation results
+      correlation_summary = prescription_appointment_correlation.groupby("correlation").size().reset_index(name="count")
+
+| Correlation | Count |
+|-------------|-------|
+| True        | 128   |
+
+**Results**: 
+The analysis confirms a strong correlation between appointment and prescription frequencies. This suggests that prescriptions are consistently issued during consultations, with each patient visit typically resulting in a prescription.
+
+**Business Implication**: This pattern indicates consistent prescription practices across providers. Further analysis could examine prescription appropriateness and explore opportunities for medication management programs.
+
+## Conclusion
+
+The data analysis reveals several key insights about the healthcare facility's operations:
+
+1. **Patient Demographics**: The age distribution shows balanced care across different life stages, with notable concentrations in specific age groups.
+
+2. **Appointment Patterns**: Regular patients form the core of the facility's business, with checkups being the most common appointment type. Emergency visits spike on Fridays.
+
+3. **Prescription Behavior**: Heart medications dominate prescriptions for middle-aged patients, and there's a strong correlation between appointments and prescriptions.
+
+These findings can inform operational decisions, resource allocation, and targeted healthcare programs to improve patient outcomes and facility efficiency.
+
+## Next Steps
+
+Based on the analysis, potential next steps include:
+
+1. Developing targeted preventive care programs for high-risk groups
+2. Optimizing staffing for peak emergency periods (especially Fridays)
+3. Implementing medication management initiatives for frequently prescribed categories
+4. Further exploring the demographic patterns to enhance service delivery
+
+## Technical Implementation Notes
+
+The analysis was implemented using:
+- PostgreSQL for database storage and query execution
+- Pandas for data manipulation and result processing
+- Python for orchestrating the analysis workflow
