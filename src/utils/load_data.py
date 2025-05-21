@@ -29,7 +29,7 @@ def load_data(df: pd.DataFrame, table_name: str, schema: str) -> None:
     else:
         first_run = "replace"
 
-    df['date_insertion'] = pd.to_datetime("now")
+    df["date_insertion"] = pd.to_datetime("now")
     # Send DataFrame to the specified schema and table
     df.to_sql(table_name, con=engine, schema=schema, if_exists=first_run, index=False)
 

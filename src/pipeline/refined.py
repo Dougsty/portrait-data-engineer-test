@@ -81,7 +81,7 @@ data_to_refinement = {
 }
 
 
-def refinement_data():
+def refine_all_data():
     """Transform data from trusted to refined layer"""
     for table_name, transform_func in data_to_refinement.items():
         query = f"SELECT * FROM healthcare.trusted.{table_name}"
@@ -89,5 +89,6 @@ def refinement_data():
         transformed_df = transform_func(df)
         load_data(df=transformed_df, table_name=table_name, schema="refined")
 
+
 if __name__ == "__main__":
-    refinement_data()
+    refine_all_data()

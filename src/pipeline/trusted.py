@@ -37,8 +37,8 @@ data_to_transform = {
 }
 
 
-def transform_data():
-    """ Transform data from raw to trusted layer """
+def transform_all_data():
+    """Transform data from raw to trusted layer"""
     for table_name, transform_func in data_to_transform.items():
         query = f"SELECT * FROM healthcare.raw.{table_name}"
         df = pd.read_sql(query, con=postgres_connection())
@@ -47,4 +47,4 @@ def transform_data():
 
 
 if __name__ == "__main__":
-    transform_data()
+    transform_all_data()
