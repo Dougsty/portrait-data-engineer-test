@@ -10,7 +10,7 @@ import pandas as pd
 
 def refinement_appointment(df: pd.DataFrame) -> pd.DataFrame:
     df["day_of_week"] = df["appointment_date"].dt.day_name()
-    df["time_since_last_appointment"] = (
+    df["days_since_last_appointment"] = (
         pd.to_datetime("now") - df["appointment_date"]
     ).dt.days
     return df
