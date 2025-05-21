@@ -25,10 +25,19 @@ def postgres_connection(
         database (str): PostgreSQL database name.
     Returns:
         engine (create_engine): SQLAlchemy engine object.
+    Raises:
+        ValueError: If any required parameter is missing.
+        Exception: If the connection to the database fails.
     """
 
-    # Create a connection string
+    # Validate required parameters
+    if not user or not password:
+        raise ValueError("Database user and password must be provided.")
 
-    engine = create_engine(f"postgresql://{user}:{password}@{host}:{port}/{database}")
-    # Test the connection
-    return engine
+    try:
+        # Create a connection string
+        engine = create_engine(f"postgresql://{user}:{password}@{host}:{port}/{database}")
+        
+        return engine
+    except Exception as e:
+        raise Exception(f"Failed to connect to the PostgreSQL database: {e}")
