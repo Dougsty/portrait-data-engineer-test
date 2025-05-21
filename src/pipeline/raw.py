@@ -14,11 +14,18 @@ def load_all_raw_data():
     schema = "raw"
     for dataset in os.listdir(dataset_path):
         if dataset.endswith(".csv"):
-            print(f"=== Loading {dataset}...")
-            table_name = dataset.split(".")[0]  # Extract table name from filename
-            data = pd.read_csv(os.path.join(dataset_path, dataset))
-            load_data(df=data, table_name=table_name, schema=schema)
-            print(f"--- Successfully loaded {table_name=} into {schema=}")
+            try:
+                print(f"=== Loading {dataset}...")
+                table_name = dataset.split(".")[0]  # Extract table name from filename
+                data = pd.read_csv(os.path.join(dataset_path, dataset))
+                load_data(df=data, table_name=table_name, schema=schema)
+                print(f"--- Successfully loaded {table_name=} into {schema=}")
+            except FileNotFoundError as e:
+                print(f"Error: File not found - {e}")
+            except pd.errors.EmptyDataError as e:
+                print(f"Error: Empty data in file {dataset} - {e}")
+            except Exception as e:
+                print(f"Unexpected error while loading {dataset}: {e}")
 
 
 if __name__ == "__main__":
