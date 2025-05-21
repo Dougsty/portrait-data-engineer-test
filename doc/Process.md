@@ -23,3 +23,13 @@ I created a src folder for the main project code, a .env file for environment va
 
 I emulated the PostgreSQL schema as a container from a data lake (due to time constraints and test scope). The complete flow is: CSV → Bronze/Raw → Silver/Trusted (with data typing) → Gold/Refined (aggregated for analysis).
 
+### Proper Project
+Estructure;
+project_root/
+├── src/                # Source code directory containing all functions
+│   ├── pipeline/       # Data transformation logic
+│   └── utils/          # Helper functions and utilities
+├── notebooks/          # Jupyter notebooks for exploration and analysis
+├── sample_datasets/    # Sample data directory
+└── .env                # Environment variables (not committed to repository)
+
