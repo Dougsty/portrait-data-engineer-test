@@ -60,7 +60,7 @@ def refinement_prescriptions(df: pd.DataFrame) -> pd.DataFrame:
 
     df = df.merge(df_frequency, on="patient_id", how="left")
 
-    df["prescription_frequency"] = pd.cut(
+    df["prescription_frequency_type"] = pd.cut(
         df["prescription_frequency"], bins=[0, 1, 100], labels=["First-time", "Repeat"]
     )
 
