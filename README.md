@@ -1,4 +1,4 @@
-# Process documentation
+# Process Documentation
 
 ## Environment Tools
 - Claude for this documentation and layout
