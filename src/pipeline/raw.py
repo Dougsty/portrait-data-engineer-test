@@ -20,5 +20,6 @@ def load_all_raw_data():
             load_data(df=data, table_name=table_name, schema=schema)
             print(f"--- Successfully loaded {table_name=} into {schema=}")
 
+
 if __name__ == "__main__":
     load_all_raw_data()

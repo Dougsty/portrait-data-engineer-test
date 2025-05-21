@@ -22,16 +22,17 @@ def load_data(df: pd.DataFrame, table_name: str, schema: str) -> None:
         connection.execute(text(f"CREATE SCHEMA IF NOT EXISTS {schema}"))
         connection.commit()
 
-    # Check if the table already exists, for incremental or full load
-    # If the table exists, append data; otherwise, replace it
-
+    # Check for incremental or full load
     inspector = inspect(engine)
     if inspector.has_table(table_name, schema=schema):
         first_run = "append"
     else:
         first_run = "replace"
 
+    df['date_insertion'] = pd.to_datetime("now")
     # Send DataFrame to the specified schema and table
     df.to_sql(table_name, con=engine, schema=schema, if_exists=first_run, index=False)
 
-    print(f"Data sent to {schema}.{table_name} with {first_run} operation successfully!")
+    print(
+        f"=== Data sent to {schema}.{table_name} with {first_run} operation successfully!"
+    )
